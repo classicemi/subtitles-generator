@@ -1,0 +1,1 @@
+"""Subtitle generator web application."""

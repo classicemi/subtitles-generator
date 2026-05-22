@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Data (sqlite, uploads, artifacts, playback, pid, logs)
+data/
+
+# Models (large binary files)
+models/*.bin
+
+# whisper.cpp (cloned and built locally)
+vendor/whisper.cpp/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Logs
+*.log

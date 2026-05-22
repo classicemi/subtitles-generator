@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+faster-whisper>=1.2
+
+# Optional alternative local transcription backend:
+# openai-whisper>=20240930
