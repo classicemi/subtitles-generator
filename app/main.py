@@ -12,6 +12,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.models import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, TranscriptionResult, utc_now_iso
 from app.storage import TaskStore
@@ -42,6 +43,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+STATIC_DIR = BASE_DIR / "static"
+if STATIC_DIR.exists() and any(STATIC_DIR.iterdir()):
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
 def _safe_filename(filename: str) -> str:
@@ -242,3 +247,11 @@ def write_artifacts(task_id: str, filename: str, result: TranscriptionResult) ->
     }
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"srt": srt_path, "vtt": vtt_path, "json": json_path}
+
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="Not found")

@@ -149,6 +149,7 @@ export default function TaskListPage() {
               <span>Source file</span>
               <span>Language</span>
               <span>Duration</span>
+              <span>Progress</span>
               <span>Status</span>
             </div>
             {filteredTasks.map((task) => (
@@ -164,11 +165,9 @@ export default function TaskListPage() {
                 </div>
                 <div className="task-cell">{languageLabel(task)}</div>
                 <div className="task-cell">{formatDuration(task.duration_seconds)}</div>
+                <div className="task-cell">{task.progress}%</div>
                 <div className="task-cell">
                   <StatusBadge status={task.status} />
-                </div>
-                <div className="progress-line" aria-label={`Progress ${task.progress}%`}>
-                  <span style={{ width: `${task.progress}%` }} />
                 </div>
               </Link>
             ))}

@@ -16,7 +16,7 @@ FRONTEND_PID := $(PID_DIR)/.frontend.pid
 
 .PHONY: setup start stop clean
 .PHONY: setup-python setup-whisper setup-model setup-frontend
-.PHONY: build-whisper download-model
+.PHONY: build-whisper download-model build-frontend
 
 # ── One-time setup ───────────────────────────────────────────────
 
@@ -56,9 +56,12 @@ setup-frontend: frontend/node_modules/.package-lock.json
 frontend/node_modules/.package-lock.json: frontend/package.json
 	cd frontend && npm install
 
+build-frontend:
+	cd frontend && npm run build
+
 # ── Start / Stop services ────────────────────────────────────────
 
-start:
+start: build-frontend
 	@mkdir -p $(PID_DIR)
 	@if [ -f $(BACKEND_PID) ] && kill -0 $$(cat $(BACKEND_PID)) 2>/dev/null; then \
 		echo "Backend already running (PID $$(cat $(BACKEND_PID)))"; \
