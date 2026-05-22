@@ -1,11 +1,16 @@
 export type TaskStatus = "queued" | "running" | "succeeded" | "failed";
 
-export type ArtifactType = "srt" | "vtt" | "json";
+export type ArtifactType = "srt" | "vtt" | "json" | "translated_srt" | "translated_vtt" | "translated_json";
 
 export interface TaskArtifact {
   type: ArtifactType;
   label: string;
   filename: string;
+}
+
+export interface SupportedLanguage {
+  code: string;
+  name: string;
 }
 
 export interface TaskSource {
@@ -28,6 +33,7 @@ export interface TaskRecord {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  translated_language: string | null;
   artifacts: TaskArtifact[];
 }
 

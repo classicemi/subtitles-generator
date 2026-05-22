@@ -59,6 +59,10 @@ class TaskRecord:
     subtitle_srt_path: Path | None = None
     subtitle_vtt_path: Path | None = None
     transcript_json_path: Path | None = None
+    translated_language: str | None = None
+    translated_srt_path: Path | None = None
+    translated_vtt_path: Path | None = None
+    translated_json_path: Path | None = None
     completed_at: str | None = None
     artifacts: list[dict[str, str]] = field(default_factory=list)
 
@@ -89,5 +93,6 @@ class TaskRecord:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
+            "translated_language": self.translated_language,
             "artifacts": self.artifacts,
         }

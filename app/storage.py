@@ -43,6 +43,10 @@ class TaskStore:
                     subtitle_srt_path TEXT,
                     subtitle_vtt_path TEXT,
                     transcript_json_path TEXT,
+                    translated_language TEXT,
+                    translated_srt_path TEXT,
+                    translated_vtt_path TEXT,
+                    translated_json_path TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     completed_at TEXT
@@ -50,6 +54,14 @@ class TaskStore:
                 """
             )
             connection.execute("CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC)")
+            self._migrate_columns(connection)
+
+    @staticmethod
+    def _migrate_columns(connection: sqlite3.Connection) -> None:
+        existing = {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
+        for column in ("translated_language", "translated_srt_path", "translated_vtt_path", "translated_json_path"):
+            if column not in existing:
+                connection.execute(f"ALTER TABLE tasks ADD COLUMN {column} TEXT")
 
     def create(self, task_id: str, filename: str, stored_path: Path) -> TaskRecord:
         now = utc_now_iso()
@@ -86,6 +98,12 @@ class TaskStore:
             raise KeyError(task_id)
         return self._row_to_task(row)
 
+    def delete(self, task_id: str) -> None:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            if cursor.rowcount == 0:
+                raise KeyError(task_id)
+
     def list(self) -> list[TaskRecord]:
         with self._connect() as connection:
             rows = connection.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
@@ -99,6 +117,12 @@ class TaskStore:
             artifacts.append({"type": "vtt", "label": "WebVTT subtitle", "filename": Path(row["subtitle_vtt_path"]).name})
         if row["transcript_json_path"]:
             artifacts.append({"type": "json", "label": "Transcript JSON", "filename": Path(row["transcript_json_path"]).name})
+        if row["translated_srt_path"]:
+            artifacts.append({"type": "translated_srt", "label": "Translated SRT", "filename": Path(row["translated_srt_path"]).name})
+        if row["translated_vtt_path"]:
+            artifacts.append({"type": "translated_vtt", "label": "Translated VTT", "filename": Path(row["translated_vtt_path"]).name})
+        if row["translated_json_path"]:
+            artifacts.append({"type": "translated_json", "label": "Translated JSON", "filename": Path(row["translated_json_path"]).name})
 
         return TaskRecord(
             id=row["id"],
@@ -114,6 +138,10 @@ class TaskStore:
             subtitle_srt_path=self._optional_path(row["subtitle_srt_path"]),
             subtitle_vtt_path=self._optional_path(row["subtitle_vtt_path"]),
             transcript_json_path=self._optional_path(row["transcript_json_path"]),
+            translated_language=row["translated_language"],
+            translated_srt_path=self._optional_path(row["translated_srt_path"]),
+            translated_vtt_path=self._optional_path(row["translated_vtt_path"]),
+            translated_json_path=self._optional_path(row["translated_json_path"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             completed_at=row["completed_at"],

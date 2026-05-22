@@ -15,12 +15,12 @@ BACKEND_PID := $(PID_DIR)/.backend.pid
 FRONTEND_PID := $(PID_DIR)/.frontend.pid
 
 .PHONY: setup start stop clean
-.PHONY: setup-python setup-whisper setup-model setup-frontend
+.PHONY: setup-python setup-whisper setup-model setup-frontend setup-translation
 .PHONY: build-whisper download-model build-frontend
 
 # ── One-time setup ───────────────────────────────────────────────
 
-setup: setup-python setup-whisper setup-model setup-frontend
+setup: setup-python setup-whisper setup-model setup-frontend setup-translation
 	@echo ""
 	@echo "Setup complete. Run 'make start' to launch the app."
 
@@ -55,6 +55,15 @@ setup-frontend: frontend/node_modules/.package-lock.json
 
 frontend/node_modules/.package-lock.json: frontend/package.json
 	cd frontend && npm install
+
+setup-translation: $(VENV)/bin/activate
+	@echo "Pre-downloading NLLB translation model (~2.5 GB)..."
+	$(PYTHON) -c "\
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer; \
+MODEL = 'facebook/nllb-200-distilled-600M'; \
+AutoTokenizer.from_pretrained(MODEL); \
+AutoModelForSeq2SeqLM.from_pretrained(MODEL); \
+print('NLLB model cached.')"
 
 build-frontend:
 	cd frontend && npm run build

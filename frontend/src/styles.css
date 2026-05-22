@@ -405,7 +405,7 @@ a {
 .task-table-head,
 .task-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 130px 100px 90px 118px;
+  grid-template-columns: minmax(260px, 1fr) 130px 100px 90px 118px 44px;
   align-items: center;
   gap: 14px;
 }
@@ -506,6 +506,25 @@ a {
   border-color: #bfe8cf;
   background: #ecfdf3;
   color: var(--success);
+}
+
+.delete-task-btn {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--subtle);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.delete-task-btn:hover {
+  border-color: #f4c6c3;
+  background: #fff3f2;
+  color: var(--danger);
 }
 
 .status-badge.failed {
@@ -782,6 +801,67 @@ a {
 .subtitle-table td:nth-child(3) {
   width: 96px;
   white-space: nowrap;
+}
+
+.translate-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.translate-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  color: var(--subtle);
+}
+
+.translate-select {
+  flex: 1;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.translate-select:focus {
+  border-color: var(--accent);
+}
+
+.translated-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-top: 4px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.translated-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.action-message.error {
+  color: var(--danger);
 }
 
 @media (max-width: 1100px) {

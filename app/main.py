@@ -13,11 +13,13 @@ from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from app.models import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, TranscriptionResult, utc_now_iso
+from app.models import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, SubtitleSegment, TranscriptionResult, utc_now_iso
 from app.storage import TaskStore
 from app.subtitles import render_srt, render_vtt
 from app.transcription import TranscriptionFailed, TranscriptionUnavailable, transcribe_video
+from app.translation import SUPPORTED_LANGUAGES, TranslationModelUnavailable, translate_segments
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -118,6 +120,26 @@ def regenerate_task(task_id: str, background_tasks: BackgroundTasks) -> dict[str
     return task.as_dict()
 
 
+@app.delete("/api/tasks/{task_id}", status_code=200)
+def delete_task(task_id: str) -> dict[str, str]:
+    try:
+        task = store.get(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Task not found") from exc
+
+    store.delete(task_id)
+
+    for directory in (
+        UPLOADS_DIR / task_id,
+        ARTIFACTS_DIR / task_id,
+        PLAYBACK_DIR / task_id,
+    ):
+        if directory.exists():
+            shutil.rmtree(directory, ignore_errors=False)
+
+    return {"detail": "Task deleted"}
+
+
 @app.head("/api/tasks/{task_id}/media")
 @app.get("/api/tasks/{task_id}/media")
 def play_source_media(task_id: str) -> FileResponse:
@@ -135,7 +157,7 @@ def play_source_media(task_id: str) -> FileResponse:
 
 
 @app.get("/api/tasks/{task_id}/download/{artifact_type}")
-def download_artifact(task_id: str, artifact_type: Literal["srt", "vtt", "json"]) -> FileResponse:
+def download_artifact(task_id: str, artifact_type: Literal["srt", "vtt", "json", "translated_srt", "translated_vtt", "translated_json"]) -> FileResponse:
     try:
         task = store.get(task_id)
     except KeyError as exc:
@@ -144,6 +166,9 @@ def download_artifact(task_id: str, artifact_type: Literal["srt", "vtt", "json"]
         "srt": task.subtitle_srt_path,
         "vtt": task.subtitle_vtt_path,
         "json": task.transcript_json_path,
+        "translated_srt": task.translated_srt_path,
+        "translated_vtt": task.translated_vtt_path,
+        "translated_json": task.translated_json_path,
     }[artifact_type]
     if artifact_path is None or not artifact_path.exists():
         raise HTTPException(status_code=404, detail="Artifact not found")
@@ -151,8 +176,100 @@ def download_artifact(task_id: str, artifact_type: Literal["srt", "vtt", "json"]
         "srt": "application/x-subrip",
         "vtt": "text/vtt",
         "json": "application/json",
+        "translated_srt": "application/x-subrip",
+        "translated_vtt": "text/vtt",
+        "translated_json": "application/json",
     }[artifact_type]
     return FileResponse(path=artifact_path, filename=artifact_path.name, media_type=media_type)
+
+
+@app.get("/api/tasks/{task_id}/languages")
+def translation_languages(task_id: str) -> dict[str, object]:
+    try:
+        store.get(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Task not found") from exc
+    return {"languages": SUPPORTED_LANGUAGES, "source_language": None}
+
+
+class TranslateRequest(BaseModel):
+    target_lang: str
+
+
+@app.post("/api/tasks/{task_id}/translate")
+def translate_task(task_id: str, body: TranslateRequest) -> dict[str, object]:
+    try:
+        task = store.get(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Task not found") from exc
+
+    if task.status != "succeeded":
+        raise HTTPException(status_code=409, detail="Task must be in succeeded state to translate")
+
+    if task.transcript_json_path is None or not task.transcript_json_path.exists():
+        raise HTTPException(status_code=404, detail="Transcript JSON not found")
+
+    valid_codes = {lang["code"] for lang in SUPPORTED_LANGUAGES}
+    if body.target_lang not in valid_codes:
+        raise HTTPException(status_code=400, detail=f"Unsupported target language: {body.target_lang}")
+
+    try:
+        transcript_data = json.loads(task.transcript_json_path.read_text(encoding="utf-8"))
+        segments = [
+            SubtitleSegment(start=seg["start"], end=seg["end"], text=seg["text"])
+            for seg in transcript_data.get("segments", [])
+        ]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=500, detail="Failed to read transcript data") from exc
+
+    try:
+        translated = translate_segments(segments, task.language or "en", body.target_lang)
+    except TranslationModelUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Translation failed: {exc}") from exc
+
+    translated_result = TranscriptionResult(
+        language=body.target_lang,
+        language_probability=1.0,
+        segments=translated,
+        backend="nllb-200-distilled-600M",
+        duration_seconds=task.duration_seconds,
+    )
+
+    artifact_dir = ARTIFACTS_DIR / task_id
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(task.filename).stem or task_id
+    safe_stem = _safe_filename(stem)
+    safe_lang = _safe_filename(body.target_lang)
+    srt_path = artifact_dir / f"{safe_stem}.{safe_lang}.translated.srt"
+    vtt_path = artifact_dir / f"{safe_stem}.{safe_lang}.translated.vtt"
+    json_path = artifact_dir / f"{safe_stem}.{safe_lang}.transcript.json"
+
+    srt_path.write_text(render_srt(translated), encoding="utf-8")
+    vtt_path.write_text(render_vtt(translated), encoding="utf-8")
+    payload = {
+        "task_id": task_id,
+        "source_filename": task.filename,
+        "generated_at": utc_now_iso(),
+        "target_language": body.target_lang,
+        **translated_result.as_dict(),
+    }
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    target_name = next(
+        (lang["name"] for lang in SUPPORTED_LANGUAGES if lang["code"] == body.target_lang),
+        body.target_lang,
+    )
+    task = store.update(
+        task_id,
+        translated_language=f"{target_name} ({body.target_lang})",
+        translated_srt_path=srt_path,
+        translated_vtt_path=vtt_path,
+        translated_json_path=json_path,
+    )
+
+    return task.as_dict()
 
 
 def process_task(task_id: str) -> None:

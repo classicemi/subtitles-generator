@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, Eye, FileJson, FileText, RefreshCw, RotateCcw } from "lucide-react";
+import { ArrowLeft, Download, Eye, FileJson, FileText, Globe, Languages, RefreshCw, RotateCcw } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
 import SubtitleDataModal from "../components/SubtitleDataModal";
-import { artifactUrl, getTask, getTranscript, mediaUrl, regenerateTask } from "../lib/api";
+import { artifactUrl, getSupportedLanguages, getTask, getTranscript, mediaUrl, regenerateTask, translateTask } from "../lib/api";
 import { formatDate, formatDuration, languageLabel } from "../lib/format";
-import type { TaskArtifact, TaskRecord, TranscriptPayload } from "../lib/types";
+import type { SupportedLanguage, TaskArtifact, TaskRecord, TranscriptPayload } from "../lib/types";
 
 export default function TaskDetailPage() {
   const { taskId } = useParams<{ taskId: string }>();
@@ -20,6 +20,10 @@ export default function TaskDetailPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [languages, setLanguages] = useState<SupportedLanguage[]>([]);
+  const [selectedTargetLang, setSelectedTargetLang] = useState("");
+  const [translating, setTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState<string | null>(null);
 
   async function load() {
     if (!taskId) {
@@ -57,6 +61,32 @@ export default function TaskDetailPage() {
       track.mode = track.kind === "subtitles" ? "showing" : "disabled";
     }
   }, [task]);
+
+  useEffect(() => {
+    if (!taskId || !task || task.status !== "succeeded") {
+      return;
+    }
+    getSupportedLanguages(taskId)
+      .then(setLanguages)
+      .catch(() => setLanguages([]));
+  }, [taskId, task?.status]);
+
+  async function handleTranslate() {
+    if (!taskId || !selectedTargetLang) {
+      return;
+    }
+    setTranslating(true);
+    setTranslationError(null);
+    setActionMessage(null);
+    try {
+      const updatedTask = await translateTask(taskId, selectedTargetLang);
+      setTask(updatedTask);
+    } catch (requestError) {
+      setTranslationError(requestError instanceof Error ? requestError.message : "Translation failed.");
+    } finally {
+      setTranslating(false);
+    }
+  }
 
   async function openTranscript() {
     if (!taskId) {
@@ -110,6 +140,7 @@ export default function TaskDetailPage() {
   }
 
   const vttArtifact = findArtifact(task, "vtt");
+  const translatedVttArtifact = findArtifact(task, "translated_vtt");
   const jsonArtifact = findArtifact(task, "json");
 
   return (
@@ -134,6 +165,9 @@ export default function TaskDetailPage() {
             <StatusBadge status={task.status} />
             <span>Language: {languageLabel(task)}</span>
             <span>Duration: {formatDuration(task.duration_seconds)}</span>
+            {task.translated_language && (
+              <span className="translated-badge">Translated: {task.translated_language}</span>
+            )}
           </div>
         </div>
 
@@ -147,6 +181,14 @@ export default function TaskDetailPage() {
                   src={artifactUrl(task.id, "vtt")}
                   srcLang={task.language || "und"}
                   label={task.language || "Subtitles"}
+                />
+              )}
+              {translatedVttArtifact && (
+                <track
+                  kind="subtitles"
+                  src={artifactUrl(task.id, "translated_vtt")}
+                  srcLang={task.translated_language || "und"}
+                  label={task.translated_language || "Translated"}
                 />
               )}
             </video>
@@ -188,6 +230,43 @@ export default function TaskDetailPage() {
               <span>{regenerating ? "Starting regeneration" : "Regenerate subtitles"}</span>
             </button>
             {actionMessage && <p className="action-message">{actionMessage}</p>}
+
+            {task.status === "succeeded" && languages.length > 0 && !task.translated_language && (
+              <div className="translate-section">
+                <div className="translate-select-row">
+                  <Languages size={17} />
+                  <select
+                    className="translate-select"
+                    value={selectedTargetLang}
+                    onChange={(e) => setSelectedTargetLang(e.target.value)}
+                  >
+                    <option value="">Select target language...</option>
+                    {languages.map((lang) => (
+                      <option key={lang.code} value={lang.code}>
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  className="primary-action wide"
+                  type="button"
+                  onClick={handleTranslate}
+                  disabled={translating || !selectedTargetLang}
+                >
+                  <Globe size={17} />
+                  <span>{translating ? "Translating..." : "Translate subtitles"}</span>
+                </button>
+                {translationError && <p className="action-message error">{translationError}</p>}
+              </div>
+            )}
+
+            {task.translated_language && (
+              <p className="translated-info">
+                <Globe size={15} />
+                <span>Translated to {task.translated_language}</span>
+              </p>
+            )}
             {jsonArtifact && (
               <button className="primary-action wide" type="button" onClick={openTranscript}>
                 <Eye size={17} />

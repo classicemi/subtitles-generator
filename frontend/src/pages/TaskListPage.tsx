@@ -1,9 +1,9 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Activity, CheckCircle2, Clock3, DownloadCloud, FileVideo, RefreshCw, Search, UploadCloud } from "lucide-react";
+import { Activity, CheckCircle2, Clock3, DownloadCloud, FileVideo, RefreshCw, Search, Trash2, UploadCloud } from "lucide-react";
 import StatusBadge from "../components/StatusBadge";
-import { createTask, listTasks } from "../lib/api";
+import { createTask, deleteTask, listTasks } from "../lib/api";
 import { formatDate, formatDuration, languageLabel } from "../lib/format";
 import type { TaskRecord } from "../lib/types";
 
@@ -78,6 +78,20 @@ export default function TaskListPage() {
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     setSelectedFile(event.target.files?.[0] ?? null);
+  }
+
+  async function handleDelete(taskId: string, filename: string, event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!window.confirm(`Delete "${filename}" and all its artifacts? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deleteTask(taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to delete task.");
+    }
   }
 
   return (
@@ -169,6 +183,15 @@ export default function TaskListPage() {
                 <div className="task-cell">
                   <StatusBadge status={task.status} />
                 </div>
+                <button
+                  className="delete-task-btn"
+                  type="button"
+                  title="Delete task"
+                  aria-label={`Delete ${task.filename}`}
+                  onClick={(e) => handleDelete(task.id, task.filename, e)}
+                >
+                  <Trash2 size={16} />
+                </button>
               </Link>
             ))}
           </div>
